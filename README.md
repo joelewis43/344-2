@@ -12,3 +12,4 @@ lewisjos.buildrooms.c
     - Each room has anywhere from 3 to 6 connections
     - Rooms cannot be connected to themselves
     - Rooms can only be connected to another room once (no repeat connections)
+ - Directory is created to store the room files (named with current process ID)
