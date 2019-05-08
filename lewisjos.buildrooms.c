@@ -169,9 +169,7 @@ void writeRooms(struct Room* rooms) {
    // make the directory and get its name
    char* currentDir = makeDir();
 
-   // file pointer
    FILE * fp;
-
    int i, j;
    char fileName[25];
    for (i=0; i<7; i++) {
@@ -192,11 +190,13 @@ void writeRooms(struct Room* rooms) {
       }
 
       // add the room type
-      fprintf(fp, "ROOM TYPE: %s", rooms[i].type);
+      fprintf(fp, "ROOM TYPE: %s\n", rooms[i].type);
 
       // Close the file
       fclose(fp);
    }
+
+   free(currentDir);
 }
 
 void freeRooms(struct Room* rooms) {
@@ -214,7 +214,6 @@ int main() {
    assignConnections(roomArray);
    writeRooms(roomArray);
    freeRooms(roomArray);
-   
    
    return 0;
 }
