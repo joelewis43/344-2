@@ -23,3 +23,9 @@ lewisjos.game.c
       - User input is requested to navigate the rooms
       - The game ends when the room with a type of END_ROOM is reached
    - The user is congratulated and their number of steps and path taken is displayed
+   - Threads
+      - The game function runs on its own thread
+      - The writeTime function runs on its own thread
+         - Is run when the user inputs "time" during the game
+      - The threads use a mutex to ensure they are not both running at the same time
+         - this avoids the game reading data from time.txt before the writeTime thread has written to it

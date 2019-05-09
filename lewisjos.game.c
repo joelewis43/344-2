@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <time.h>
+#include <pthread.h>
 
 struct Room {
    char name[9];
@@ -20,6 +21,9 @@ struct gameData {
     int numSteps;
     char path[20][9];
 };
+
+pthread_t tid[2];
+pthread_mutex_t lock;
 
 
 /* *************** HELPER FUNCTIONS *************** */
@@ -156,6 +160,44 @@ void congratulate(struct gameData* data, struct Room currentRoom) {
 }
 
 /* ************* LIFECYCLE FUNCTIONS ************* */
+void* writeTime(void* arg) {
+
+    // lock mutex for this function
+    pthread_mutex_lock(&lock);
+
+    char timeString[64];                // string for time
+    time_t t = time(NULL);              // get the current time
+    struct tm *tmp = localtime(&t);     // fill out struct with time info
+
+    // format the string based on assignment specification
+    strftime(timeString, sizeof(timeString), "%l:%M%p, %A, %B %d, %Y", tmp);
+
+    // write to file
+    FILE *fp;
+    fp = fopen("currentTime.txt", "w+");
+    fprintf(fp, "%s\n", timeString);
+    fclose(fp);
+
+    // release mutex
+    pthread_mutex_unlock(&lock);
+
+    return NULL;
+
+}
+
+void readTime() {
+
+    FILE *fp;
+    char buffer[64];
+    fp = fopen("currentTime.txt", "r");
+
+    fgets(buffer, sizeof(buffer), fp);
+
+    printf("\n\n%s\n", buffer);
+    fclose(fp);
+
+}
+
 char * findDir() {
 
     DIR *dirP;                                  // directory pointer
@@ -238,6 +280,7 @@ void readFiles(struct Room* rooms, char* dir, struct gameData* data) {
 void play(struct Room* rooms, struct gameData* data) {
 
     int nextRoom;               // room id
+    int timePrint = 0;          // flag for if the time was just printed
     data->numSteps = 0;         // initialize the number of steps
     char userResponse[64];      // buffer for user input
 
@@ -247,10 +290,16 @@ void play(struct Room* rooms, struct gameData* data) {
     // run while the user has not reached the end
     while (strcmp(currentRoom.type, "END_ROOM")) {
 
-        displayCurrentRoom(currentRoom);
+        if (!timePrint) {
+            displayCurrentRoom(currentRoom);
+        }
+        else {
+            timePrint = 0;
+        }
 
         getUserInput(userResponse);
         
+        // check if the input was valid
         if(contains(currentRoom, userResponse)) {
 
             // add name to path
@@ -265,6 +314,26 @@ void play(struct Room* rooms, struct gameData* data) {
             // increment current room
             currentRoom = rooms[nextRoom];
         }
+
+        // check if input was for the current time
+        else if (!strcmp(userResponse, "time")) {
+
+            timePrint = 1;
+
+            // unlock the mutex so the time can be written to a file
+            pthread_mutex_unlock(&lock);
+
+            // hand over execution to the time function
+            pthread_join(tid[1], NULL);
+
+            // lock mutex back to game thread
+            pthread_mutex_lock(&lock);
+
+            // read the time from the file and print
+            readTime();
+        }
+
+        // unrecognized input
         else {
             printf("\nHUH? I DON'T UNDERSTAND THAT ROOM. TRY AGAIN.\n");
         }
@@ -280,8 +349,10 @@ void freeData(struct Room* rooms, struct gameData* data, char* recentDir) {
    free(recentDir);
 }
 
-/* **************** MAIN FUNCTION **************** */ 
-int main() {
+void* game(void *arg) {
+
+    // first lock secures mutex for game thread
+    pthread_mutex_lock(&lock);
 
     // init rooms and game data
     struct Room* rooms = malloc(7*sizeof(struct Room));
@@ -294,10 +365,45 @@ int main() {
     readFiles(rooms, recentDir, data);
 
     // play the game
-    play(rooms, data);
+    play(rooms, data);          // calls lock and unlock to provide execution to other thread
 
     // free allocated memory
     freeData(rooms, data, recentDir);
+
+    // final release of mutex
+    pthread_mutex_unlock(&lock);
+
+    return NULL;
+
+}
+
+/* **************** MAIN FUNCTION **************** */ 
+int main() {
+
+    // initialize the lock
+    if (pthread_mutex_init(&lock, NULL) != 0) {
+        printf("\n mutex init failed\n");
+        return 1;
+    }
+
+    // create the threads
+    pthread_create(&(tid[0]), NULL, &game, NULL);
+    pthread_create(&(tid[1]), NULL, &writeTime, NULL);
+
+    // run the game thread
+    pthread_join(tid[0], NULL);
+    pthread_join(tid[1], NULL);     // inclusion of this line ensures no
+                                    // memory is leaked in the event the
+                                    // game is played and the "time"
+                                    // command is not provided. 
+                                    // inclusion of this line also means
+                                    // that the txt file will always be
+                                    // written following the execution
+                                    // of this program (even when command
+                                    // is not provided)
+
+    // destroy mutex
+    pthread_mutex_destroy(&lock);
 
     return 0;
 }
